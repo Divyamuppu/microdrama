@@ -37,10 +37,14 @@ function save(eps) {
 }
 
 async function pull() {
-  const r = await fetch(API, { cache: 'no-store' });
-  if (!r.ok) throw new Error('bad status');
-  const eps = await r.json();
-  return Array.isArray(eps) ? eps : [];
+  let r;
+  try { r = await fetch(API, { cache: 'no-store' }); } catch (e) { throw new Error('server not reachable'); }
+  const text = await r.text();
+  if (r.status === 404) throw new Error('/api/episodes not found (404) — function not deployed');
+  let data;
+  try { data = JSON.parse(text); } catch (e) { throw new Error(`/api/episodes returned HTML, not data (status ${r.status}) — function not deployed`); }
+  if (!r.ok) throw new Error((data && data.error) || `status ${r.status}`);
+  return Array.isArray(data) ? data : [];
 }
 
 async function poll() {
@@ -66,7 +70,8 @@ async function init() {
     online = true; S.sync = 'live'; render();
     setInterval(poll, POLL_MS);
     return;
-  } catch (e) {}
+  } catch (e) { S.err = e.message; console.error('Tracker sync:', e.message); }
+  setTimeout(init, 10000); // keep retrying
   let eps = [];
   try { const raw = localStorage.getItem(KEY); if (raw) eps = JSON.parse(raw); } catch (e) {}
   S.episodes = Array.isArray(eps) ? eps : [];
@@ -151,6 +156,7 @@ function render() {
         <span class="grotesk" style="font-weight:700;font-size:20px;letter-spacing:-0.01em;">Microdrama Pipeline</span>
         <span style="font-size:12px;color:#86857f;letter-spacing:0.04em;text-transform:uppercase;">${eps.length} episodes</span>
         <span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;color:${syncMeta[1]};background:${syncMeta[2]};"><span style="width:7px;height:7px;border-radius:50%;background:${syncMeta[1]};"></span>${syncMeta[0]}</span>
+        ${S.sync === 'local' && S.err ? `<span style="font-size:11px;color:#ff7a68;max-width:420px;">${esc(S.err)}</span>` : ''}
       </div>
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="display:flex;background:#1d1d20;border-radius:9px;padding:3px;">
